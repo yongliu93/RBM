@@ -12,18 +12,19 @@
       
       type(vector), allocatable, dimension(:) :: I_cindex
       
-      real, allocatable, dimension(:,:) ::u_num,A,B
+      real, allocatable, dimension(:,:) ::u_num,A,B1,B2
       real, allocatable, dimension(:) ::x,D1,D2
       !real, allocatable, dimension (:,:) :: c
       
       real :: tn,endt,dt,pi
       
-      integer :: NPC,K,M,numstep,Np
+      integer :: NPC,K,M,numstep,Np,np2,M2,ink
       
       
       real, allocatable,dimension(:) :: f_LHS,unum
       real, allocatable,dimension(:,:) :: r_Basis, C_basis, u_rbm!, u_ori
       real, allocatable,dimension(:) :: u0
+      real, allocatable,dimension(:,:,:) :: utruth
       
       real :: epsilon
       integer :: num_M
@@ -48,7 +49,7 @@
       
       real, allocatable, dimension(:,:) :: identity, idtA1t,idtA1,idtA2
       
-      real, allocatable, dimension(:) :: bu0
+      real, allocatable, dimension(:) :: b1u0,b2u0
       
       integer :: numstep_np,numstep_np1
       
@@ -169,35 +170,45 @@
       program main
       use comdata
       
-      numstep=5000
+      numstep=400
       
       call assignmemory
       call init
       
       
-      endt=5.0
+      endt=0.2
       
-      !call CPU_TIME(t1)
-      !call run(numstep)
-      !call CPU_TIME(t2)
+      call CPU_TIME(t1)
+      call run(numstep)
+      call CPU_TIME(t2)
       
       !call comperror
       !pause
-      !write(*,*) 'time no rbm=',t2-t1
-      !write(2018,*) 'time no rbm=',t2-t1
+      write(*,*) 'time no rbm=',t2-t1
+      write(2018,*) 'time no rbm=',t2-t1
+      
+      !do na=0,NPC-1
+      !    do i=0,np2-1
+      !        write(2000,*) u_num(na,i)
+      !    end do
+      !end do
+      
+      !pause
+      !call readutruth
+      !pause
+      !timenorbm=125057.856168000
+      timenorbm=t2-t1
+      
+      
       
       !call comperror
       !do K=6,6
             !do M=K,K
        !timenorbm=t2-t1         
-       do i=-1,-1
-           !if(i<10) then
-           !epsilon=100.0-10.*i
-           !else
-           !    epsilon=1.0-(i-10)/100.
-           !end if!1.0E-04*(1-i/2.)
-           do j=9,9,-1
+       do i=0,3
+           do j=9,1,-1
            epsilon=10.**(-i)*j!1.0E-02-i*1.0E-03
+           ink=(i+2)*100+j
         
         ! number of polynomials order and random variables 
         !K=3
@@ -275,37 +286,55 @@
       
       
      
+    subroutine readutruth
+    use comdata
     
+    open(2001,file="fort.2000",status="old")
+    
+      do na=0,NPC-1
+          do i=0,np2-1
+              read(2001,*) u_num(na,i)
+          end do
+      end do
+      
+    close(2001)
+      
+    
+    end subroutine
     
         subroutine assignmemory
         use comdata
         integer :: nchoosek
         
-        K=5
-        M=5
-        
+        K=3
+        M=3
+        M2=M
+        M=2*M
         Np=32
+        Np2=Np*Np
         
         NPC=nchoosek(K+M,K)
-        maxbasisnum=500
+        maxbasisnum=100
         !maxbasisnum=NPC
-        numstep_np=numstep*np
-        numstep_np1=(numstep+1)*np-1
+        numstep_np=numstep*np2
+        numstep_np1=(numstep+1)*np2-1
 
         
         allocate(Ic(0:NPC-1,0:K-1),alpha(0:NPC-1,0:M-1))
         allocate(s_eps(0:NPC-1),s_alpha(0:NPC-1))
-        allocate(u_num(0:NPC-1,0:Np-1))
+        allocate(u_num(0:NPC-1,0:Np2-1))
         
-        !allocate(AA(1:numstep_np,1:numstep_np))
+        allocate(AA(1:np2*2,1:np2*2))
         
         allocate(D1(0:np-1),D2(0:np-1),x(0:np-1))
-        allocate(A(0:np-1,0:np-1),B(0:np-1,0:np-1))
+        allocate(A(0:np2-1,0:np2-1),B1(0:np2-1,0:np2-1),B2(0:np2-1,0:np2-1))
         
-        allocate(identity(0:np-1,0:np-1),idtA1(0:np-1,0:np-1),idtA1t(0:np-1,0:np-1))
+        !allocate(identity(0:np-1,0:np-1),idtA1(0:np-1,0:np-1),idtA1t(0:np-1,0:np-1))
+        allocate(identity(0:np2-1,0:np2-1))
+        !allocate(idtA2(0:np-1,0:np-1))
+        allocate(b1u0(0:np2-1),b2u0(0:np2-1))
         
-        allocate(idtA2(0:np-1,0:np-1))
-        allocate(bu0(0:np-1))
+        allocate(utruth(0:NPC-1,0:np-1,0:np-1))
         
         
     do i=0,NPC-1
@@ -324,14 +353,14 @@
      allocate(r_Basis(1:numstep_np,0:maxbasisnum-1))
      allocate(f_LHS(0:numstep_np-1),unum(0:numstep_np1+1))
      
-     allocate(u_rbm(0:NPC-1,0:np-1),u0(0:np-1))
+     allocate(u0(0:np2-1))
      
      !allocate(u_ori(0:NPC-1,1:numstep_np))
      
      allocate(basisnum(1:maxbasisnum))
      allocate(pickup(0:NPC-1))
      
-     allocate(uAAu(1:maxbasisnum,1:maxbasisnum),uA(1:maxbasisnum,1:numstep_np),AAu(1:numstep_np,1:maxbasisnum))
+     allocate(uAAu(1:maxbasisnum,1:maxbasisnum),uA(1:maxbasisnum,1:numstep_np))
      allocate(uAMu(0:M-1,1:maxbasisnum,1:maxbasisnum),Mu(0:M-1,1:numstep_np,1:maxbasisnum))
      allocate(uAAu_i(1:maxbasisnum,1:maxbasisnum))
      
@@ -474,7 +503,7 @@
     
     end subroutine
       
-      subroutine LegendrePoly(y,left,right,k,p)
+    subroutine LegendrePoly(y,left,right,k,p)
       implicit none
       
       real :: y, left,right
@@ -501,55 +530,145 @@
               p(i)=p(i)*sqrt((2.0*i+1.0)/(right-left))
           end do
           
-      
 
       end subroutine LegendrePoly
       
-      
-      
+ 
       subroutine getDiscretization(res)
       use comdata
       
-      real, dimension (0:M-1) :: basis
+      real, dimension (0:M/2-1) :: basis
       integer :: i,j,na
       
-      real, intent(out),dimension (0:NPC-1,0:Np-1) ::res
-      real, allocatable, dimension (:,:) :: tmp
+      real, intent(out),dimension (0:NPC-1,0:Np2-1) ::res
+      real, allocatable, dimension (:,:) :: tmp1,tmp2
+      real, allocatable, dimension (:) :: testb,testb2
       
-      allocate(tmp(0:NPC-1,0:Np-1))
+      allocate(tmp1(0:NPC-1,0:Np2-1),tmp2(0:npc-1,0:np2-1))
+      allocate(testb(0:np2-1),testb2(0:np2-1))
       
-      !res=0.
-      !tmp=0.
+      res=0.
+      tmp1=0.
+      tmp2=0.
       
-      call LegendrePoly(tn,0.,endt,M-1,basis)
-      !call TriPoly(tn,0.,endt,M-1,basis)
-      do na=0, NPC-1
-          do i=0, NP-1
-              res(na,i)=sum(A(i,0:np-1)*u_num(na,0:np-1))
+      call LegendrePoly(tn,0.,endt,M/2-1,basis)
+      
+      do na=0,NPC-1
+          do i2=0,np-1
+              do i1=0,np-1
+                  do j1=0,i1-1
+                      tmp1(na,i1*np+i2)=tmp1(na,i1*np+i2)+D1(j1+np-i1)*u_num(na,j1*np+i2)
+                  end do
+                  do j1=i1,np-1
+                      tmp1(na,i1*np+i2)=tmp1(na,i1*np+i2)+D1(j1-i1)*u_num(na,j1*np+i2)
+                  end do
+              end do
           end do
       end do
       
       do na=0,NPC-1
-          do i=0,Np-1
-              tmp(na,i)=sum(B(i,0:np-1)*u_num(na,0:np-1))
+          do i1=0,np-1
+              do i2=0,np-1
+                  do j2=0,i2-1
+                      tmp2(na,i1*np+i2)=tmp2(na,i1*np+i2)+D1(j2+np-i2)*u_num(na,i1*np+j2)
+                  end do
+                  do j2=i2,np-1
+                      tmp2(na,i1*np+i2)=tmp2(na,i1*np+i2)+D1(j2-i2)*u_num(na,i1*np+j2)
+                  end do
+              end do
           end do
       end do
       
+      do na=0,NPC-1
+          do i2=0,np-1
+              do i1=0,np-1
+                  do j1=0,i1-1
+                      res(na,i1*np+i2)=res(na,i1*np+i2)+0.5*D2(j1+np-i1)*u_num(na,j1*np+i2)
+                  end do
+                  
+                  do j1=i1,np-1
+                      res(na,i1*np+i2)=res(na,i1*np+i2)+0.5*D2(j1-i1)*u_num(na,j1*np+i2)
+                  end do
+                  
+              end do
+          end do
+      end do
+      
+      
+      do na=0, NPC-1
+          do i1=0,np-1
+              do i2=0,np-1
+                  do j2=0,i2-1
+                      res(na,i1*np+i2)=res(na,i1*np+i2)+0.5*D2(j2+np-i2)*u_num(na,i1*np+j2)
+                  end do
+                  
+                  do j2=i2,np-1
+                      res(na,i1*np+i2)=res(na,i1*np+i2)+0.5*D2(j2-i2)*u_num(na,i1*np+j2)
+                  end do
+                  
+              end do
+          end do
+      end do
+      
+      do na=0, NPC-1
+          do i1=0,np-1
+              do i2=0,np-1
+                  do j2=0,i2-1
+                      res(na,i1*np+i2)=res(na,i1*np+i2)-D1(j2+np-i2)*tmp1(na,i1*np+j2)
+                  end do
+                  
+                  do j2=i2,np-1
+                      res(na,i1*np+i2)=res(na,i1*np+i2)-D1(j2-i2)*tmp1(na,i1*np+j2)
+                  end do
+                  
+              end do
+          end do
+      end do
       
       
       do na=1,NPC-1
-          do i=0,Np-1
           do l=1,s_eps(na)%index(0)
-          res(na,i)=res(na,i)+sqrt(real(alpha(na,s_eps(na)%index(l))))* &
-          tmp(s_alpha(na)%index(l),i)*basis(s_eps(na)%index(l))
+            if (s_eps(na)%index(l) <M/2) then
+                  do i1=0,np-1
+                      do i2=0,np-1
+        res(na,i1*np+i2)=res(na,i1*np+i2)+sqrt(real(alpha(na,s_eps(na)%index(l))))* &
+          basis(s_eps(na)%index(l))*cos(x(i1)+x(i2))*(tmp1(s_alpha(na)%index(l),i1*np+i2)-tmp2(s_alpha(na)%index(l),i1*np+i2))
+                      end do
+                  end do
+            else
+                  do i1=0,np-1
+                      do i2=0,np-1
+        res(na,i1*np+i2)=res(na,i1*np+i2)+sqrt(real(alpha(na,s_eps(na)%index(l))))* &
+          basis(s_eps(na)%index(l)-M/2)*sin(x(i1)+x(i2))*(tmp1(s_alpha(na)%index(l),i1*np+i2)-tmp2(s_alpha(na)%index(l),i1*np+i2))
+                      end do
+                  end do
+            end if
           end do
-          end do
-          
-          
       end do
       
       
-      deallocate(tmp)
+      !do na=0, NPC-1
+      !    
+      !    
+      !    
+      !    do i1=0,np-1
+      !        do i2=0,np-1
+      !            
+      !    testb(i1*np+i2)=sin(x(i1)+x(i2))*(tmp1(na,i1*np+i2)-tmp2(na,i1*np+i2))
+      !    testb2(i1*np+i2)=sum(B2(i1*np+i2,0:np2-1)*u_num(na,0:np2-1))
+      !    
+      !        end do
+      !    end do
+      !    
+      !    write(*,*) maxval(abs(testb(0:np2-1)-testb2(0:np2-1)))
+      !end do
+      
+      
+      
+      
+      deallocate(tmp1,tmp2)
+      
+      deallocate(testb,testb2)
       
       
       end subroutine getDiscretization
@@ -564,8 +683,15 @@
       pi=4.*atan(1.0)
       do i=0,Np-1
           x(i)=2.0*pi/Np*i
-          u_num(0,i)=cos(x(i))
+          !u_num(0,i)=cos(x(i))
       end do
+      
+      do i=0,np-1
+          do j=0,np-1
+              u_num(0,i*np+j)=sin(2*x(i))*sin(x(j))
+          end do
+      end do
+      
       
       tn=0.
       !allocate(I_cindex(0:nchoosek(8,4)-1))
@@ -614,26 +740,112 @@
       
       D2(0)=-(Np*Np+2)/12.0
       
-      do i=0, Np-1
-          do j=0,i-1
-              A(i,j)=0.145*D2(j+Np-i)+0.1*sin(x(i))*D1(j+Np-i)
-              B(i,j)=0.5*D1(j+Np-i)
+      
+      A=0.
+      B1=0.
+      B2=0.
+      
+      do i2=0, Np-1
+          do i1=0,Np-1
+          do j1=0,i1-1
+              A(i1*np+i2,j1*np+i2)=A(i1*np+i2,j1*np+i2)+0.5*D2(j1+np-i1)
+              !B(i1*np+i2,j1*np+i2)=0.5*D1(j+Np-i)
           end do
           
-          do j=i,Np-1
-              A(i,j)=0.145*D2(j-i)+0.1*sin(x(i))*D1(j-i)
-              B(i,j)=0.5*D1(j-i)
+          do j1=i1,Np-1
+              A(i1*np+i2,j1*np+i2)=A(i1*np+i2,j1*np+i2)+0.5*D2(j1-i1)
+              !B(i,j)=0.5*D1(j-i)
+          end do
+          
           end do
           
       end do
       
+      do i1=0,np-1
+          do i2=0,np-1
+              do j2=0,i2-1
+                  A(i1*np+i2,i1*np+j2)=A(i1*np+i2,i1*np+j2)+0.5*D2(j2+np-i2)
+              end do
+              
+              do j2=i2,np-1
+                  A(i1*np+i2,i1*np+j2)=A(i1*np+i2,i1*np+j2)+0.5*D2(j2-i2)
+              end do
+              
+          end do
+      end do
+      
+      
+      do i1=0,np-1
+          do j1=0,i1-1
+          do i2=0,np-1
+                  do j2=0,i2-1
+                      A(i1*np+i2,j1*np+j2)=A(i1*np+i2,j1*np+j2)-D1(j2+np-i2)*D1(j1+np-i1)
+                  end do
+                  do j2=i2,np-1
+                      A(i1*np+i2,j1*np+j2)=A(i1*np+i2,j1*np+j2)-D1(j2-i2)*D1(j1+np-i1)
+                  end do
+                  
+          end do
+          end do
+          
+          
+          do j1=i1,np-1
+              do i2=0,np-1
+                  do j2=0,i2-1
+                      A(i1*np+i2,j1*np+j2)=A(i1*np+i2,j1*np+j2)-D1(j2+np-i2)*D1(j1-i1)
+                  end do
+                  do j2=i2,np-1
+                      A(i1*np+i2,j1*np+j2)=A(i1*np+i2,j1*np+j2)-D1(j2-i2)*D1(j1-i1)
+                  end do
+                  
+              end do
+          end do
+      end do
+    
+      do i1=0,np-1
+          do i2=0,np-1
+              do j2=0,i2-1
+                  B1(i1*np+i2,i1*np+j2)=B1(i1*np+i2,i1*np+j2)-D1(j2+np-i2)*cos(x(i1)+x(i2))
+                  B2(i1*np+i2,i1*np+j2)=B2(i1*np+i2,i1*np+j2)-D1(j2+np-i2)*sin(x(i1)+x(i2))
+              end do
+              
+              do j2=i2,np-1
+                  B1(i1*np+i2,i1*np+j2)=B1(i1*np+i2,i1*np+j2)-D1(j2-i2)*cos(x(i1)+x(i2))
+                  B2(i1*np+i2,i1*np+j2)=B2(i1*np+i2,i1*np+j2)-D1(j2-i2)*sin(x(i1)+x(i2))
+              end do
+              
+              do j1=0,i1-1
+                  B1(i1*np+i2,j1*np+i2)=B1(i1*np+i2,j1*np+i2)+D1(j1+np-i1)*cos(x(i1)+x(i2))
+                  B2(i1*np+i2,j1*np+i2)=B2(i1*np+i2,j1*np+i2)+D1(j1+np-i1)*sin(x(i1)+x(i2))
+              
+              end do
+              
+              do j1=i1,np-1
+                  B1(i1*np+i2,j1*np+i2)=B1(i1*np+i2,j1*np+i2)+D1(j1-i1)*cos(x(i1)+x(i2))
+                  B2(i1*np+i2,j1*np+i2)=B2(i1*np+i2,j1*np+i2)+D1(j1-i1)*sin(x(i1)+x(i2))
+              
+              end do
+          end do
+      end do
       
       
       !call compute_mineigen
-      
+      !pause
       !do i=0,70-1
       !    write(*,"(4I8)") I_cindex(i)%index(:)
       !end do
+      
+      
+      !open(30,file="30.txt",status="old")
+      !
+      !do na=0,NPC-1
+      !    do i1=0,np-1  
+      !      read(30,*) (utruth(na,i1,i2),i2=0,np-1)
+      !    end do
+      !end do
+      
+      
+      
       
       end subroutine init
       
@@ -644,7 +856,7 @@
       real, allocatable,dimension(:,:)  :: u00,k1,k2,k3,k4
       !real, allocatable,dimension(:,:) :: k1
       
-      allocate(u00(0:NPC-1,0:np-1),k1(0:NPC-1,0:np-1),k2(0:NPC-1,0:np-1),k3(0:NPC-1,0:np-1),k4(0:NPC-1,0:np-1))
+      allocate(u00(0:NPC-1,0:np2-1),k1(0:NPC-1,0:np2-1),k2(0:NPC-1,0:np2-1),k3(0:NPC-1,0:np2-1),k4(0:NPC-1,0:np2-1))
       !k1=0.0
       !u00=u_num
       call getDiscretization(k1)
@@ -691,6 +903,7 @@
           call stepForward
           !u_ori(0:NPC-1,(step-1)*np+1:step*np)=u_num(0:NPC-1,0:np-1)
           write(11,*) 'Step=',step,'t=',tn
+          write(*,*) 'Step=',step,'t=',tn
           
           !u1(:,step)=u_num(:)
           !write(*,*) sum(abs(u_num(:)-u(:,step)))/NPC
@@ -708,20 +921,20 @@
       deallocate(u_num,Ic,alpha,s_eps,s_alpha,I_cindex)
      
       
-      deallocate(f_LHS,r_Basis,C_basis,u_rbm,unum,basisnum,u0,frb)
+      deallocate(f_LHS,r_Basis,C_basis,unum,basisnum,u0,frb)
       deallocate(pickup)
-      deallocate(uAAu,Mu,uA,uAMu,AAu)
+      deallocate(uAAu,Mu,uA,uAMu)
       deallocate(uAAu_i)
       deallocate(ipiv,Mk)
       
       deallocate(res_Q,res_R)
-      !deallocate(AA)
+      deallocate(AA)
       
-      deallocate(A,B,D1,D2,x)
+      deallocate(A,B1,B2,D1,D2,x)
       
-      deallocate(identity, idtA1t,idtA1,idtA2)
+      deallocate(identity)
       
-      deallocate(bu0)
+      deallocate(b1u0,b2u0)
       
       !deallocate(u_ori)
       
@@ -757,7 +970,7 @@
           !u_rbm(pos,0:np-1)=u_rbm(pos,0:np-1)+C_basis(pos,j)*r_basis((numstep-1)*np+1:numstep*np,j)
           !end do
           
-          !write(*,*) maxval(abs(u_ori(pos,(numstep-1)*np+1:numstep*np)-u_num(pos,0:np-1)))
+          !write(*,*) maxval(abs(unum(numstep*np2:(numstep+1)*np2-1)-u_num(pos,0:np2-1)))
           !write(*,*)
           !pause
           !write(*,*) abs(u_rbm(pos,0:np-1)-u_num(pos,0:np-1))
@@ -1010,77 +1223,60 @@
     
     
     
-    !subroutine assemble_mat
+    !subroutine assemble_lhs(pos)
     !use comdata
     !
-    !A_mass=0.
-    !A_mass(1,1)=1.
-    !do i=2,numstep
-    !A_mass(i,i)=1.
-    !A_mass(i,i-1)=-(1+dt)
-    !end do
+    !integer :: pos
+    !!real, dimension (0:M-1) :: basis
+    ! 
+    ! 
+    ! 
+    !f_LHS=0.
+    !!tn=(0)*dt
+    !    !call LegendrePoly(tn,0.,endt,M-1,basis)
+    !    
+    !    do l=1,s_eps(pos)%index(0)
+    !        
+    !        if (s_alpha(pos)%index(l) .eq. 0) then
+    !        do j=0,np-1
+    !      f_LHS(j)=f_LHS(j)+sqrt(real(alpha(pos,s_eps(pos)%index(l))))*bu0(j)*Mk(0,s_eps(pos)%index(l))*dt
+    !        end do
+    !        end if
+    !        
+    !    end do
     !
+    !    
     !
-    !
-    !
-    !
-    !end subroutine
-    
-    
-    subroutine assemble_lhs(pos)
-    use comdata
-    
-    integer :: pos
-    !real, dimension (0:M-1) :: basis
-     
-     
-     
-    f_LHS=0.
-    !tn=(0)*dt
-        !call LegendrePoly(tn,0.,endt,M-1,basis)
-        
-        do l=1,s_eps(pos)%index(0)
-            
-            if (s_alpha(pos)%index(l) .eq. 0) then
-            do j=0,np-1
-          f_LHS(j)=f_LHS(j)+sqrt(real(alpha(pos,s_eps(pos)%index(l))))*bu0(j)*Mk(0,s_eps(pos)%index(l))*dt
-            end do
-            end if
-            
-        end do
-    
-        
-
-        
-    do i=2,numstep
-        !tn=(i-1)*dt
-        !call LegendrePoly(tn,0.,endt,M-1,basis)
-        do l=1,s_eps(pos)%index(0)
-            do j=0,np-1
-          f_LHS((i-1)*np+j)=f_LHS((i-1)*np+j)+sqrt(real(alpha(pos,s_eps(pos)%index(l))))* &
-         sum(Mu(s_eps(pos)%index(l),(i-1)*np+j+1,1:num_M)*C_basis(s_alpha(pos)%index(l),0:num_M-1))
-            end do
-        end do
-        f_LHS((i-1)*np:i*np-1)=dt*f_LHS((i-1)*np:i*np-1)
-        
-    end do
-    
-    
+    !    
     !do i=2,numstep
     !    !tn=(i-1)*dt
     !    !call LegendrePoly(tn,0.,endt,M-1,basis)
     !    do l=1,s_eps(pos)%index(0)
     !        do j=0,np-1
     !      f_LHS((i-1)*np+j)=f_LHS((i-1)*np+j)+sqrt(real(alpha(pos,s_eps(pos)%index(l))))* &
-    !     Mk(i-1,s_eps(pos)%index(l))*sum(B(j,0:np-1)*u_ori(s_alpha(pos)%index(l),(i-2)*np+1:(i-1)*np))
+    !     sum(Mu(s_eps(pos)%index(l),(i-1)*np+j+1,1:num_M)*C_basis(s_alpha(pos)%index(l),0:num_M-1))
     !        end do
     !    end do
     !    f_LHS((i-1)*np:i*np-1)=dt*f_LHS((i-1)*np:i*np-1)
     !    
     !end do
-    
-    
-    end subroutine
+    !
+    !
+    !!do i=2,numstep
+    !!    !tn=(i-1)*dt
+    !!    !call LegendrePoly(tn,0.,endt,M-1,basis)
+    !!    do l=1,s_eps(pos)%index(0)
+    !!        do j=0,np-1
+    !!      f_LHS((i-1)*np+j)=f_LHS((i-1)*np+j)+sqrt(real(alpha(pos,s_eps(pos)%index(l))))* &
+    !!     Mk(i-1,s_eps(pos)%index(l))*sum(B(j,0:np-1)*u_ori(s_alpha(pos)%index(l),(i-2)*np+1:(i-1)*np))
+    !!        end do
+    !!    end do
+    !!    f_LHS((i-1)*np:i*np-1)=dt*f_LHS((i-1)*np:i*np-1)
+    !!    
+    !!end do
+    !
+    !
+    !end subroutine
     
    
     subroutine assemble_frb(pos)
@@ -1095,12 +1291,19 @@
     !frb(1:num_M)=uA(1:num_M,1)*(u0(pos)+dt*u0(pos))
     frb=0.
     do l=1,s_eps(pos)%index(0)
-        
         if (s_alpha(pos)%index(l) .eq. 0) then
+            if (s_eps(pos)%index(l) < M2) then
             do i=1,num_M
         frb(i)=frb(i)+dt*sqrt(real(alpha(pos,s_eps(pos)%index(l))))*Mk(0,s_eps(pos)%index(l))*&
-        sum(uA(i,1:np)*bu0(0:np-1))
+        sum(uA(i,1:np2)*b1u0(0:np2-1))
             end do
+            else
+            do i=1,num_M
+        frb(i)=frb(i)+dt*sqrt(real(alpha(pos,s_eps(pos)%index(l))))*Mk(0,s_eps(pos)%index(l)-M2)*&
+        sum(uA(i,1:np2)*b2u0(0:np2-1))
+            end do
+            end if
+            
         end if
         
         do i=1,num_M
@@ -1184,16 +1387,27 @@
       !if(pickup(pos) .eq. 1) then 
           
          C_basis(pos,0:num_M-1)=tmp_c(1:num_M,1)
-         write(13,*) 'pos=',pos,'resrb=',resrb
+         !write(13,*) 'pos=',pos,'resrb=',resrb
+         !write(*,*) 'pos=',pos,'resrb=',resrb
          
       else
      
          write(13,*) 'pos=',pos,'resrb=',resrb
+         write(*,*) 'pos=',pos,'resrb=',resrb
          call run_ori(pos)
          
          !write(*,*) abs(unum(numstep*np:numstep_np1)-u_num(pos,0:np-1))
-
+         !write(*,*) maxval(abs(unum(numstep*np2:(numstep+1)*np2-1)-u_num(pos,0:np2-1)))
+          
          call update_rbmatrix(pos)
+         
+         !error=0.
+         !do i=0,np2-1
+         !    tmpu=sum(C_basis(pos,0:num_M-1)*r_basis((numstep-1)*np2+i+1,0:num_M-1))
+         !    error=max(error,abs(tmpu-u_num(pos,i)))
+         !end do
+         !
+         !write(*,*) error
          
          !num_M=num_M+1
          !C_basis(pos,num_M-1)=1.0
@@ -1208,9 +1422,9 @@
          write(13,*)'alpha='
          write(13,'(100I2)')(alpha(pos,i),i=0,M-1)
          
-         !write(*,*) "bais number=", pos
-         !write(*,*)'alpha='
-         !write(*,'(100I2)')(alpha(pos,i),i=0,M-1)
+         write(*,*) "bais number=", pos
+         write(*,*)'alpha='
+         write(*,'(100I2)')(alpha(pos,i),i=0,M-1)
          
          basisnum(num_M)=pos
          
@@ -1484,7 +1698,7 @@
         tmp2(j)=tmp2(j)+c_alpha(i+1)*res_R(j,i*(M+1)+1)
         do l=1,s_eps(pos)%index(0)
             
-            tmp2(j)=tmp2(j)-dt*sqrt(real(alpha(pos,s_eps(pos)%index(l))))*C_basis(s_alpha(pos)%index(l),i)*res_R(j,i*(M+1)+s_eps(pos)%index(l)+2)
+        tmp2(j)=tmp2(j)-dt*sqrt(real(alpha(pos,s_eps(pos)%index(l))))*C_basis(s_alpha(pos)%index(l),i)*res_R(j,i*(M+1)+s_eps(pos)%index(l)+2)
         
         end do
         
@@ -1544,12 +1758,13 @@
     INTEGER info,IWORK(1:num_M+1)
     real, allocatable, dimension(:,:) :: tmp
     
-    real, allocatable, dimension(:) :: tmpvec1,tmpvec2
+    real, allocatable, dimension(:) :: tmpvec1,tmpvec2,res,tmp3
     real :: tmp1,tmp2
     
     allocate(tmpvec1(1:numstep_np),tmpvec2(1:numstep_np))
     
     allocate(tmp(1:num_M+1,1:num_M+1))
+    allocate(res(0:np2-1),tmp3(0:np2-1))
     
     
     !do i=1, num_M
@@ -1569,8 +1784,8 @@
         C_basis(pos,num_M)=1.
         do j=1,num_M
             
-            tmp1=sum(unum(np:numstep_np1)*r_basis(1:numstep_np,j-1))
-            tmpvec2(1:numstep_np)=unum(np:numstep_np1)-tmp1*r_basis(1:numstep_np,j-1)
+            tmp1=sum(unum(np2:numstep_np1)*r_basis(1:numstep_np,j-1))
+            tmpvec2(1:numstep_np)=unum(np2:numstep_np1)-tmp1*r_basis(1:numstep_np,j-1)
     
             tmp2=sqrt(sum(tmpvec2(1:numstep_np)**2))
             
@@ -1584,7 +1799,7 @@
                 exit
                 
             else
-                unum(np:numstep_np1)=tmpvec2(1:numstep_np)/tmp2
+                unum(np2:numstep_np1)=tmpvec2(1:numstep_np)/tmp2
                 num_Mup=1
                 C_basis(pos,num_M)=tmp2*C_basis(pos,num_M)
                 
@@ -1594,22 +1809,80 @@
         
     if (num_Mup .eq. 1) then
             num_M=num_M+1
-            r_basis(1:numstep_np,num_M-1)=unum(np:numstep_np1)
+            r_basis(1:numstep_np,num_M-1)=unum(np2:numstep_np1)
             
-    uA(num_M,1:np)=unum(np:2*np-1)
+    uA(num_M,1:np2)=unum(np2:2*np2-1)
     do i=2,numstep
-        do j=0,np-1
-    uA(num_M,(i-1)*np+j+1)=unum(i*np+j)-sum(idtA1t(0:np-1,j)*unum((i-1)*np:i*np-1))
-        end do
+        
+        
+          tmp3=0.
+          res=0.
+          do i2=0,np-1
+              do i1=0,np-1
+                  do j1=0,i1-1
+                      tmp3(i1*np+i2)=tmp3(i1*np+i2)+D1(j1+np-i1)*unum((i-1)*np2+j1*np+i2)
+                  end do
+                  do j1=i1,np-1
+                      tmp3(i1*np+i2)=tmp3(i1*np+i2)+D1(j1-i1)*unum((i-1)*np2+j1*np+i2)
+                  end do
+              end do
+          end do
+      
+      
+      
+          
+      
+      
+      
+          do i2=0,np-1
+              do i1=0,np-1
+                  do j1=0,i1-1
+                      res(i1*np+i2)=res(i1*np+i2)+0.5*D2(j1+np-i1)*unum((i-1)*np2+j1*np+i2)
+                  end do
+                  
+                  do j1=i1,np-1
+                      res(i1*np+i2)=res(i1*np+i2)+0.5*D2(j1-i1)*unum((i-1)*np2+j1*np+i2)
+                  end do
+                  
+              end do
+          end do
+      
+      
+      
+          do i1=0,np-1
+              do i2=0,np-1
+                  do j2=0,i2-1
+                      res(i1*np+i2)=res(i1*np+i2)+0.5*D2(j2+np-i2)*unum((i-1)*np2+i1*np+j2)
+                  end do
+                  
+                  do j2=i2,np-1
+                      res(i1*np+i2)=res(i1*np+i2)+0.5*D2(j2-i2)*unum((i-1)*np2+i1*np+j2)
+                  end do
+                  
+              end do
+          end do
+      
+      
+      
+          do i1=0,np-1
+              do i2=0,np-1
+                  do j2=0,i2-1
+                      res(i1*np+i2)=res(i1*np+i2)-D1(j2+np-i2)*tmp3(i1*np+j2)
+                  end do
+                  
+                  do j2=i2,np-1
+                      res(i1*np+i2)=res(i1*np+i2)-D1(j2-i2)*tmp3(i1*np+j2)
+                  end do
+                  
+              end do
+          end do
+          
+          uA(num_M,(i-1)*np2+1:i*np2)=unum(i*np2:(i+1)*np2-1)-(unum((i-1)*np2:i*np2-1)+dt*res(0:np2-1))
+        
+        
     end do
     
-    !do i=1,numstep-1
-    !    do j=0,np-1
-    !AAu((i-1)*np+j+1,num_M)=uA(num_M,(i-1)*np+j+1)-sum(idtA1t(j,0:np-1)*uA(num_M,i*np+1:(i+1)*np))
-    !    end do
-    !end do
-    !AAu((numstep-1)*np+1:numstep*np,num_M)=uA(num_M,(numstep-1)*np+1:numstep*np)
-    !
+    
     do i=1,num_M
     uAAu(num_M,i)=sum(uA(num_M,1:numstep_np)*uA(i,1:numstep_np))
     uAAu(i,num_M)=uAAu(num_M,i)
@@ -1621,11 +1894,20 @@
     
     
     do i=0, M-1
-    do ns=2,numstep
-            do j=0,np-1
-            Mu(i,(ns-1)*np+j+1,num_M)=Mk(ns-1,i)*sum(B(j,0:np-1)*unum((ns-1)*np:ns*np-1))
+        if (i < M2) then
+        do ns=2,numstep
+            do j=0,np2-1
+            Mu(i,(ns-1)*np2+j+1,num_M)=Mk(ns-1,i)*sum(B1(j,0:np2-1)*unum((ns-1)*np2:ns*np2-1))
             end do
-    end do
+        end do
+        else
+        do ns=2,numstep
+            do j=0,np2-1
+            Mu(i,(ns-1)*np2+j+1,num_M)=Mk(ns-1,i-M2)*sum(B2(j,0:np2-1)*unum((ns-1)*np2:ns*np2-1))
+            end do
+        end do
+        end if
+        
     
     do j=1,num_M
     uAMu(i,num_M,j)=sum(uA(num_M,1:numstep_np)*Mu(i,1:numstep_np,j))!sum(unum(2:numstep)*Mk(1:numstep-1,i)*r_basis(2:numstep,j-1))-(1+dt)*sum(r_basis(3:numstep,j-1)*unum(2:numstep-1)*Mk(1:numstep-2,i))
@@ -1636,6 +1918,9 @@
     
     uAMu(i,num_M,num_M)=sum(uA(num_M,1:numstep_np)*Mu(i,1:numstep_np,num_M))!sum(unum(2:numstep)*Mk(1:numstep-1,i)*unum(2:numstep))-(1+dt)*sum(unum(3:numstep)*unum(2:numstep-1)*Mk(1:numstep-2,i))
     
+    
+        
+            
     
     end do
     
@@ -1744,17 +2029,82 @@
     subroutine run_ori(pos)
     use comdata
 
-      real, dimension (0:M-1) :: basis
+      real, dimension (0:M/2-1) :: basis
       integer :: i,pos
-      
+      real, allocatable, dimension(:) :: tmp1,res,tmp2
+      allocate(tmp1(0:np2-1),res(0:np2-1),tmp2(0:np2-1))
 
       if (pos .eq. 0) then
       !res=unum(0)+1.0
-      unum(0:np-1)=u0(0:np-1)
+      !unum(0:np-1)=u0(0:np-1)
       do i=1,numstep
-          do j=0,Np-1
-              unum(i*Np+j)=unum((i-1)*np+j)+dt*sum(A(j,0:np-1)*unum((i-1)*np:i*np-1))
+          tmp1=0.
+          res=0.
+          do i2=0,np-1
+              do i1=0,np-1
+                  do j1=0,i1-1
+                      tmp1(i1*np+i2)=tmp1(i1*np+i2)+D1(j1+np-i1)*unum(j1*np+i2)
+                  end do
+                  do j1=i1,np-1
+                      tmp1(i1*np+i2)=tmp1(i1*np+i2)+D1(j1-i1)*unum(j1*np+i2)
+                  end do
+              end do
           end do
+      
+      
+      
+          
+      
+      
+      
+          do i2=0,np-1
+              do i1=0,np-1
+                  do j1=0,i1-1
+                      res(i1*np+i2)=res(i1*np+i2)+0.5*D2(j1+np-i1)*unum(j1*np+i2)
+                  end do
+                  
+                  do j1=i1,np-1
+                      res(i1*np+i2)=res(i1*np+i2)+0.5*D2(j1-i1)*unum(j1*np+i2)
+                  end do
+                  
+              end do
+          end do
+      
+      
+      
+          do i1=0,np-1
+              do i2=0,np-1
+                  do j2=0,i2-1
+                      res(i1*np+i2)=res(i1*np+i2)+0.5*D2(j2+np-i2)*unum(i1*np+j2)
+                  end do
+                  
+                  do j2=i2,np-1
+                      res(i1*np+i2)=res(i1*np+i2)+0.5*D2(j2-i2)*unum(i1*np+j2)
+                  end do
+                  
+              end do
+          end do
+      
+      
+      
+          do i1=0,np-1
+              do i2=0,np-1
+                  do j2=0,i2-1
+                      res(i1*np+i2)=res(i1*np+i2)-D1(j2+np-i2)*tmp1(i1*np+j2)
+                  end do
+                  
+                  do j2=i2,np-1
+                      res(i1*np+i2)=res(i1*np+i2)-D1(j2-i2)*tmp1(i1*np+j2)
+                  end do
+                  
+              end do
+          end do
+          
+          
+          unum(0:np2-1)=unum(0:np2-1)+dt*res(0:np2-1)
+          
+          unum(i*np2:(i+1)*np2-1)=unum(0:np2-1)
+      
           
       end do
       
@@ -1762,22 +2112,221 @@
       !u_rbm(pos,1:numstep)=unum(1:numstep)
       
       else
+          res=0.
+          tmp1=0.
+          tmp2=0.
+          unum=0.
+          call LegendrePoly(0.,0.,endt,M/2-1,basis)
           
-          call assemble_lhs(pos)
+          do l=1,s_eps(pos)%index(0)
+              if (s_eps(pos)%index(l) <M2) then
+                  if (s_alpha(pos)%index(l) .eq. 0) then  
+            do i1=0,np-1
+                do i2=0,np-1
+                  do j1=0,i1-1
+                      tmp1(i1*np+i2)=tmp1(i1*np+i2)+D1(j1+np-i1)*u0(j1*np+i2)
+                  end do
+                  do j1=i1,np-1
+                      tmp1(i1*np+i2)=tmp1(i1*np+i2)+D1(j1-i1)*u0(j1*np+i2)
+                  end do 
+                  
+                  do j2=0,i2-1
+                      tmp2(i1*np+i2)=tmp2(i1*np+i2)+D1(j2+np-i2)*u0(i1*np+j2)
+                  end do
+                  do j2=i2,np-1
+                      tmp2(i1*np+i2)=tmp2(i1*np+i2)+D1(j2-i2)*u0(i1*np+j2)
+                  end do
+                  
+                  
+                          
+            res(i1*np+i2)=res(i1*np+i2)+sqrt(real(alpha(pos,s_eps(pos)%index(l))))* &
+          basis(s_eps(pos)%index(l))*cos(x(i1)+x(i2))*(tmp1(i1*np+i2)-tmp2(i1*np+i2))
+                      end do
+            end do
+                  end if
+                  
+              else
+                  if (s_alpha(pos)%index(l) .eq. 0) then
+                  do i1=0,np-1
+                      do i2=0,np-1
+                          
+                  do j1=0,i1-1
+                      tmp1(i1*np+i2)=tmp1(i1*np+i2)+D1(j1+np-i1)*u0(j1*np+i2)
+                  end do
+                  do j1=i1,np-1
+                      tmp1(i1*np+i2)=tmp1(i1*np+i2)+D1(j1-i1)*u0(j1*np+i2)
+                  end do 
+                  
+                  do j2=0,i2-1
+                      tmp2(i1*np+i2)=tmp2(i1*np+i2)+D1(j2+np-i2)*u0(i1*np+j2)
+                  end do
+                  do j2=i2,np-1
+                      tmp2(i1*np+i2)=tmp2(i1*np+i2)+D1(j2-i2)*u0(i1*np+j2)
+                  end do
+                  
+            res(i1*np+i2)=res(i1*np+i2)+sqrt(real(alpha(pos,s_eps(pos)%index(l))))* &
+          basis(s_eps(pos)%index(l)-M2)*sin(x(i1)+x(i2))*(tmp1(i1*np+i2)-tmp2(i1*np+i2))
+                      end do
+                  end do
+                  end if
+                  
+              end if
+          end do
           
-          unum(np:2*np-1)=f_LHS(0:np-1)
+          unum(0:np2-1)=unum(0:np2-1)+dt*res(0:np2-1)
+          
+          
+          unum(np2:2*np2-1)=unum(0:np2-1)
+          
+          
           do i=2,numstep
-              do j=0,np-1
-          unum(i*np+j)=f_LHS((i-1)*np+j)+unum((i-1)*np+j)+dt*sum(A(j,0:np-1)*unum((i-1)*np:i*np-1))
+          tmp1=0.
+          tmp2=0.
+          res=0.
+          do i2=0,np-1
+              do i1=0,np-1
+                  do j1=0,i1-1
+                      tmp1(i1*np+i2)=tmp1(i1*np+i2)+D1(j1+np-i1)*unum(j1*np+i2)
+                  end do
+                  do j1=i1,np-1
+                      tmp1(i1*np+i2)=tmp1(i1*np+i2)+D1(j1-i1)*unum(j1*np+i2)
+                  end do
+              end do
+          end do
+      
+      
+      
+          
+      
+      
+      
+          do i2=0,np-1
+              do i1=0,np-1
+                  do j1=0,i1-1
+                      res(i1*np+i2)=res(i1*np+i2)+0.5*D2(j1+np-i1)*unum(j1*np+i2)
+                  end do
+                  
+                  do j1=i1,np-1
+                      res(i1*np+i2)=res(i1*np+i2)+0.5*D2(j1-i1)*unum(j1*np+i2)
+                  end do
+                  
+              end do
+          end do
+      
+      
+      
+          do i1=0,np-1
+              do i2=0,np-1
+                  do j2=0,i2-1
+                      res(i1*np+i2)=res(i1*np+i2)+0.5*D2(j2+np-i2)*unum(i1*np+j2)
+                  end do
+                  
+                  do j2=i2,np-1
+                      res(i1*np+i2)=res(i1*np+i2)+0.5*D2(j2-i2)*unum(i1*np+j2)
+                  end do
+                  
+              end do
+          end do
+      
+      
+      
+          do i1=0,np-1
+              do i2=0,np-1
+                  do j2=0,i2-1
+                      res(i1*np+i2)=res(i1*np+i2)-D1(j2+np-i2)*tmp1(i1*np+j2)
+                  end do
+                  
+                  do j2=i2,np-1
+                      res(i1*np+i2)=res(i1*np+i2)-D1(j2-i2)*tmp1(i1*np+j2)
+                  end do
+                  
               end do
           end do
           
-          !u_ori(pos,1:numstep_np)=unum(np:numstep_np1)
-          !u1(pos,1:numstep)=unum(1:numstep)
-          !u_rbm(pos,0:np-1)=unum(numstep_np:numstep_np1)
-          !write(*,*) maxval(abs(u_rbm(pos,1:numstep)-u1(pos,1:numstep)))
+          
+          call LegendrePoly((i-1)*dt,0.,endt,M2-1,basis)
+          
+          do l=1,s_eps(pos)%index(0)
+              tmp1=0.
+              tmp2=0.
+          if (s_eps(pos)%index(l) < M2) then 
+            do i1=0,np-1
+                do i2=0,np-1
+                  
+                 do j1=0,i1-1
+                      
+                      tmpu=sum(C_basis(s_alpha(pos)%index(l),0:num_M-1)*r_basis((i-2)*np2+j1*np+i2+1,0:num_M-1))
+                      
+                      tmp1(i1*np+i2)=tmp1(i1*np+i2)+D1(j1+np-i1)*tmpu
+                  end do
+                  do j1=i1,np-1
+                      tmpu=sum(C_basis(s_alpha(pos)%index(l),0:num_M-1)*r_basis((i-2)*np2+j1*np+i2+1,0:num_M-1))
+                      tmp1(i1*np+i2)=tmp1(i1*np+i2)+D1(j1-i1)*tmpu
+                  end do 
+                  
+                  do j2=0,i2-1
+                      
+                      tmpu=sum(C_basis(s_alpha(pos)%index(l),0:num_M-1)*r_basis((i-2)*np2+i1*np+j2+1,0:num_M-1))
+                      tmp2(i1*np+i2)=tmp2(i1*np+i2)+D1(j2+np-i2)*tmpu
+                  end do
+                  do j2=i2,np-1
+                      tmpu=sum(C_basis(s_alpha(pos)%index(l),0:num_M-1)*r_basis((i-2)*np2+i1*np+j2+1,0:num_M-1))
+                      tmp2(i1*np+i2)=tmp2(i1*np+i2)+D1(j2-i2)*tmpu
+                  end do
+                  
+                  
+                          
+            res(i1*np+i2)=res(i1*np+i2)+sqrt(real(alpha(pos,s_eps(pos)%index(l))))* &
+          basis(s_eps(pos)%index(l))*cos(x(i1)+x(i2))*(tmp1(i1*np+i2)-tmp2(i1*np+i2))
+            end do
+            end do
+                  
+              else
+                  
+                  do i1=0,np-1
+                      do i2=0,np-1
+                          
+                  do j1=0,i1-1
+                      
+                      tmpu=sum(C_basis(s_alpha(pos)%index(l),0:num_M-1)*r_basis((i-2)*np2+j1*np+i2+1,0:num_M-1))
+                      
+                      tmp1(i1*np+i2)=tmp1(i1*np+i2)+D1(j1+np-i1)*tmpu
+                  end do
+                  do j1=i1,np-1
+                      tmpu=sum(C_basis(s_alpha(pos)%index(l),0:num_M-1)*r_basis((i-2)*np2+j1*np+i2+1,0:num_M-1))
+                      tmp1(i1*np+i2)=tmp1(i1*np+i2)+D1(j1-i1)*tmpu
+                  end do 
+                  
+                  do j2=0,i2-1
+                      
+                      tmpu=sum(C_basis(s_alpha(pos)%index(l),0:num_M-1)*r_basis((i-2)*np2+i1*np+j2+1,0:num_M-1))
+                      tmp2(i1*np+i2)=tmp2(i1*np+i2)+D1(j2+np-i2)*tmpu
+                  end do
+                  do j2=i2,np-1
+                      tmpu=sum(C_basis(s_alpha(pos)%index(l),0:num_M-1)*r_basis((i-2)*np2+i1*np+j2+1,0:num_M-1))
+                      tmp2(i1*np+i2)=tmp2(i1*np+i2)+D1(j2-i2)*tmpu
+                  end do
+                  
+            res(i1*np+i2)=res(i1*np+i2)+sqrt(real(alpha(pos,s_eps(pos)%index(l))))* &
+          basis(s_eps(pos)%index(l)-M2)*sin(x(i1)+x(i2))*(tmp1(i1*np+i2)-tmp2(i1*np+i2))
+                      end do
+                  end do
+                  
+              end if
+              
+          end do
+          
+          unum(0:np2-1)=unum(0:np2-1)+dt*res(0:np2-1)
+              
+          unum(i*np2:(i+1)*np2-1)=unum(0:np2-1)
+          
+          end do
+          
       end if
       
+      
+          
+          deallocate(tmp1,tmp2,res)
       
       
     end subroutine
@@ -1789,25 +2338,29 @@
     integer :: info,lwork,lda
     
     
-    allocate(w(1:numstep_np),work(1:3*numstep_np-1))
+    allocate(w(1:2*np2),work(1:3*2*np2-1))
     !epsilon=1.0E-04
-    lda=numstep_np
-    lwork=3*numstep_np-1
+    lda=np2*2
+    lwork=3*np2*2-1
     info=0
     
-    
-    
-    AA=0.
-    do i=1,numstep-1
-    AA((i-1)*np+1:i*np,(i-1)*np+1:i*np)=idtA2
-    AA((i-1)*np+1:i*np,(i)*np+1:(i+1)*np)=-idtA1t
-    AA((i)*np+1:(i+1)*np,(i-1)*np+1:(i)*np)=-idtA1
+    do i=0,np2-1
+        identity(i,i)=1.0
     end do
-    AA((numstep-1)*np+1:numstep*np,(numstep-2)*np+1:(numstep-1)*np)=-idtA1
-    AA((numstep-1)*np+1:numstep*np,(numstep-1)*np+1:numstep*np)=identity
+    AA(1:np2,1:np2)=identity(0:np2-1,0:np2-1)+matmul(identity(0:np2-1,0:np2-1)+dt*transpose(A(0:np2-1,0:np2-1)),identity(0:np2-1,0:np2-1)+dt*A(0:np2-1,0:np2-1))
+    AA(1:np2,np2+1:2*np2)=-(identity(0:np2-1,0:np2-1)+dt*transpose(A(0:np2-1,0:np2-1)))
+    AA(np2+1:2*np2,1:np2)=AA(1:np2,np2+1:2*np2)
+    AA(np2+1:2*np2,np2+1:2*np2)=identity(0:np2-1,0:np2-1)
+    !do i=1,numstep-1
+    !AA((i-1)*np+1:i*np,(i-1)*np+1:i*np)=idtA2
+    !AA((i-1)*np+1:i*np,(i)*np+1:(i+1)*np)=-idtA1t
+    !AA((i)*np+1:(i+1)*np,(i-1)*np+1:(i)*np)=-idtA1
+    !end do
+    !AA((numstep-1)*np+1:numstep*np,(numstep-2)*np+1:(numstep-1)*np)=-idtA1
+    !AA((numstep-1)*np+1:numstep*np,(numstep-1)*np+1:numstep*np)=identity
     
     
-    call dsyev('N','U',numstep,AA,lda,w,work,lwork,info)
+    call dsyev('N','U',np2*2,AA,lda,w,work,lwork,info)
     
     rmineigen=sqrt(w(1))
     
@@ -1820,7 +2373,7 @@
     subroutine init_rbm
     use comdata
     
-    real, dimension(0:M-1) :: basis
+    real, dimension(0:M2-1) :: basis
     
     real, allocatable, dimension(:) :: tmpvec1,tmpvec2!,w,work
     real :: tmp1,tmp2
@@ -1838,12 +2391,15 @@
     
     
     do i=0,NP-1
-    unum(i)=cos(x(i))
-    u0(i)=unum(i)
+        do j=0,np-1
+    unum(i*np+j)=sin(2*x(i))*sin(x(j))
+    u0(i*np+j)=unum(i*np+j)
+        end do
     end do
     
-    do i=0,np-1
-        bu0(i)=sum(B(i,0:np-1)*u0(0:np-1))
+    do i=0,np2-1
+        b1u0(i)=sum(B1(i,0:np2-1)*u0(0:np2-1))
+        b2u0(i)=sum(B2(i,0:np2-1)*u0(0:np2-1))
     end do
     
     
@@ -1855,10 +2411,11 @@
     
     call run_ori(0)
     
+    !write(*,*) maxval(abs(unum(numstep*np2:(numstep+1)*np2-1)-u_num(0,0:np2-1)))
     !u_ori(0,1:numstep_np)=unum(np:numstep_np1)
     
-    rnorm=sqrt(sum(unum(np:numstep_np1)**2))
-    unum(np:numstep_np1)=unum(np:numstep_np1)/rnorm
+    rnorm=sqrt(sum(unum(np2:numstep_np1)**2))
+    unum(np2:numstep_np1)=unum(np2:numstep_np1)/rnorm
     
     !---------construct Arb
     
@@ -1867,45 +2424,28 @@
     !
     !uAAu_i(1,1)=1./uAAu(1,1)
     
-    identity=0.
-    do i=0,np-1
-        identity(i,i)=1.0
-    end do
+    !identity=0.
+    !do i=0,np-1
+    !    identity(i,i)=1.0
+    !end do
+    !
+    !idtA2=matmul(identity+transpose(A)*dt,identity+A*dt)+identity
+    !idtA1=identity+A*dt
+    !idtA1t=transpose(idtA1)
     
-    idtA2=matmul(identity+transpose(A)*dt,identity+A*dt)+identity
-    idtA1=identity+A*dt
-    idtA1t=transpose(idtA1)
-    
-    rmineigen=1.988756172562638E-002
+    rmineigen=0.618033988749895     
 
     !call compute_mineigen
     
     
-    !do j=0,np-1
-    !AAu(j+1,1)=sum(idtA2(j,0:np-1)*unum(np:2*np-1))-sum(idtA1t(j,0:np-1)*unum(2*np:3*np-1))
-    !end do
-    !do i=2,numstep-1
-    !    do j=0,np-1
-    !        
-    !AAu((i-1)*np+j+1,1)=sum(idtA2(j,0:np-1)*unum(i*np:(i+1)*np-1))-sum(idtA1t(j,0:np-1)*unum((i+1)*np:(i+2)*np-1))-sum(idtA1(j,0:np-1)*unum((i-1)*np:(i)*np-1))
-    !
-    !    end do
-    !end do
-    !do j=0,np-1
-    !AAu((numstep-1)*np+j+1,1)=unum(numstep*np+j)-sum(idtA1(j,0:np-1)*unum((numstep-1)*np:numstep*np-1))
-    !end do
+    
     
     !uAA(1,1:numstep)=AAu(1:numstep,1)
     
-    uA(1,1:np)=unum(np:2*np-1)
-    !do i=2,numstep
-    !    do j=0,np-1
-    !uA(1,(i-1)*np+j+1)=unum(i*np+j)-sum(idtA1t(0:np-1,j)*unum((i-1)*np:i*np-1))
-    !    end do
-    !end do
-    uA(1,np+1:numstep+np)=0.
+    uA(1,1:np2)=unum(np2:2*np2-1)
+    uA(1,np2+1:numstep_np)=0.
     
-    uAAu(1,1)=sum(uA(1,1:np)*uA(1,1:np))
+    uAAu(1,1)=sum(uA(1,1:np2)*uA(1,1:np2))
     uAAu_i(1,1)=1./uAAu(1,1)
     
     
@@ -1920,9 +2460,9 @@
      
     
     do i=0,numstep-1
-        call LegendrePoly(i*dt,0.,endt,M-1,basis)
+        call LegendrePoly(i*dt,0.,endt,M2-1,basis)
         
-        Mk(i,0:M-1)=basis(0:M-1)
+        Mk(i,0:M2-1)=basis(0:M2-1)
         
     end do
     
@@ -1931,15 +2471,25 @@
     !uMAu=0.
     
     do i=0, M-1
+        if (i < M2) then
         do ns=2,numstep
-            do j=0,np-1
-            Mu(i,(ns-1)*np+j+1,1)=Mk(ns-1,i)*sum(B(j,0:np-1)*unum((ns-1)*np:ns*np-1))
+            do j=0,np2-1
+            Mu(i,(ns-1)*np2+j+1,1)=Mk(ns-1,i)*sum(B1(j,0:np2-1)*unum((ns-1)*np2:ns*np2-1))
             end do
         end do
+        else
+        do ns=2,numstep
+            do j=0,np2-1
+            Mu(i,(ns-1)*np2+j+1,1)=Mk(ns-1,i-M2)*sum(B2(j,0:np2-1)*unum((ns-1)*np2:ns*np2-1))
+            end do
+        end do
+            
+        end if
+        
         
     !Mu(i,2:numstep,1)=Mk(1:numstep-1,i)*unum(1:numstep-1)
     
-    uAMu(i,1,1)=sum(uA(1,1:np)*Mu(i,1:np,1))!sum(unum(2:numstep)**2*Mk(1:numstep-1,i))-(1+dt)*sum(unum(3:numstep)*unum(2:numstep-1)*Mk(1:numstep-2,i))
+    uAMu(i,1,1)=sum(uA(1,1:numstep_np)*Mu(i,1:numstep_np,1))!sum(unum(2:numstep)**2*Mk(1:numstep-1,i))-(1+dt)*sum(unum(3:numstep)*unum(2:numstep-1)*Mk(1:numstep-2,i))
     !uMAu(i,1,1)=uAMu(i,1,1)
     
     end do
@@ -1951,8 +2501,8 @@
     
     
     
-    tmp=sqrt(sum(uA(1,1:np)**2))
-    res_Q(1:np,1)=uA(1,1:np)/tmp
+    tmp=sqrt(sum(uA(1,1:np2)**2))
+    res_Q(1:np2,1)=uA(1,1:np2)/tmp
     
     res_R(1,1)=tmp
     !res_RTR(1,1)=tmp*tmp
@@ -2031,7 +2581,7 @@
     
     
     
-    r_basis(1:numstep_np,0)=unum(np:numstep_np1)
+    r_basis(1:numstep_np,0)=unum(np2:numstep_np1)
     
     C_basis=0.
     C_basis(0,num_M-1)=rnorm
@@ -2077,50 +2627,73 @@
     subroutine comperror
     use comdata
     
-    open(219,file="rbm.dat")
-    do i=0,np-1
-        write(219,*) 2.0*pi/np*i,u_num(0,i),sum(u_num(0:npc-1,i)*u_num(0:npc-1,i))
-    end do
-    close(219)
-    
-    
-    
+    error=0.
+    uaprox=0.
+    ufw=0.
     error2=0.
-    u_rbm=0.
-    do i=0,NPC-1
-        do j=0,num_M-1
-        u_rbm(i,0:np-1)=u_rbm(i,0:np-1)+C_basis(i,j)*r_basis((numstep-1)*np+1:numstep*np,j)
-        end do
-        
+    do na=0,NPC-1
+         do i=0,np2-1
+             tmpu=sum(C_basis(na,0:num_M-1)*r_basis((numstep-1)*np2+i+1,0:num_M-1))
+             write(ink,*) tmpu
+             error2=error2+abs(tmpu-u_num(na,i))**2
+             error=max(error,abs(tmpu-u_num(na,i)))
+         end do
     end do
     
-    !open(unit=22,file='my_numu.dat')
-    !do i=0,NPC-1
-    !    write(22,"(160000ES26.16)") (u_ori(i,j),j=1,numstep_np)
+    !uaprox=uaprox*4*pi**2/np2
+    !ufw=ufw*4*pi**2/np2
+    
+    error2=error2*4*pi**2/np2
+    
+    write(*,*) "maximum error=",error
+    write(2018,*) "maximum error=",error
+    
+    !error2=abs(uaprox-ufw)
+    
+    !open(219,file="rbm.dat")
+    !do i=0,np-1
+    !    write(219,*) 2.0*pi/np*i,u_num(0,i),sum(u_num(0:npc-1,i)*u_num(0:npc-1,i))
     !end do
-    
-    
+    !close(219)
     !
     !
+    !
+    !error2=0.
+    !u_rbm=0.
+    !do i=0,NPC-1
+    !    do j=0,num_M-1
+    !    u_rbm(i,0:np-1)=u_rbm(i,0:np-1)+C_basis(i,j)*r_basis((numstep-1)*np+1:numstep*np,j)
+    !    end do
+    !    
+    !end do
+    !
+    !!open(unit=22,file='my_numu.dat')
     !!do i=0,NPC-1
-    !!    error=max(error,maxval(abs(u1(i,1:numstep)-u_rbm(i,1:numstep))))
+    !!    write(22,"(160000ES26.16)") (u_ori(i,j),j=1,numstep_np)
     !!end do
     !
     !
+    !!
+    !!
+    !!!do i=0,NPC-1
+    !!!    error=max(error,maxval(abs(u1(i,1:numstep)-u_rbm(i,1:numstep))))
+    !!!end do
+    !!
+    !!
+    !!
+    !!!write(13,*) 'max error=',error
+    !!!write(*,*) 'max error=',error
+    !!
+    !do j=0,np-1
+    !error2=error2+(sum(u_rbm(1:NPC-1,j)*u_rbm(1:NPC-1,j))-sum(u_num(1:npc-1,j)*u_num(1:npc-1,j)))**2
+    !end do
     !
-    !!write(13,*) 'max error=',error
-    !!write(*,*) 'max error=',error
+    !error2=sqrt(error2)
     !
-    do j=0,np-1
-    error2=error2+(sum(u_rbm(1:NPC-1,j)*u_rbm(1:NPC-1,j))-sum(u_num(1:npc-1,j)*u_num(1:npc-1,j)))**2
-    end do
-    
-    error2=sqrt(error2)
-    
-    write(*,*) 'E[1] error=',error2
-    write(*,*)
-    write(2018,*) 'E[1] error=',error2
-    write(2018,*)
+    !write(*,*) 'E[1] error=',error2
+    !write(*,*)
+    !write(2018,*) 'E[1] error=',error2
+    !write(2018,*)
     
     !
     !write(2018,*) 'E[0]=',u_rbm(0),'E[1]=',apem2
